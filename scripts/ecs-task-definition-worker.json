@@ -1,0 +1,40 @@
+{
+  "family": "findmyjob-staging-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::690637085216:role/findmyjob-staging-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::690637085216:role/findmyjob-staging-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "690637085216.dkr.ecr.ap-south-1.amazonaws.com/findmyjob-api:staging",
+      "command": ["python", "-m", "app.worker.run_worker"],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "findmyjob-staging-worker",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "worker"
+        }
+      },
+      "secrets": [
+        { "name": "MONGODB_URI", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:MONGODB_URI::" },
+        { "name": "MONGODB_DB_NAME", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:MONGODB_DB_NAME::" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:REDIS_URL::" },
+        { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:SECRET_KEY::" },
+        { "name": "TOKEN_ENCRYPTION_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:TOKEN_ENCRYPTION_KEY::" },
+        { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:GOOGLE_CLIENT_ID::" },
+        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:GOOGLE_CLIENT_SECRET::" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:OPENAI_API_KEY::" },
+        { "name": "STORAGE_BACKEND", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:STORAGE_BACKEND::" }
+      ],
+      "environment": [
+        { "name": "ENV", "value": "staging" },
+        { "name": "DEBUG", "value": "true" }
+      ]
+    }
+  ]
+}

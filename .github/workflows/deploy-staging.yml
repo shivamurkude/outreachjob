@@ -1,0 +1,91 @@
+# Deploy to AWS staging (ECS) when push to main. Runs tests first; deploys only if tests pass.
+# Requires GitHub secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual run
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: findmyjob-api
+  ECS_CLUSTER: findmyjob-staging-cluster
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - run: ruff check app tests
+      - run: pytest tests -v --tb=short
+        env:
+          MONGODB_URI: mongodb://localhost:27017
+          MONGODB_DB_NAME: findmyjob_test
+          SECRET_KEY: test-secret-key-min-32-characters-long
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:staging .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:staging
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:staging" >> $GITHUB_OUTPUT
+
+      - name: Update ECS API service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service api \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }} \
+            --query 'service.{serviceName:serviceName,desiredCount:desiredCount,runningCount:runningCount}' \
+            --output table
+
+      - name: Update ECS Worker service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service worker \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }} \
+            --query 'service.{serviceName:serviceName,desiredCount:desiredCount,runningCount:runningCount}' \
+            --output table
+
+      - name: Deployment summary
+        run: |
+          echo "## Staging deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`${{ steps.build.outputs.image }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- ECS cluster: ${{ env.ECS_CLUSTER }}" >> $GITHUB_STEP_SUMMARY

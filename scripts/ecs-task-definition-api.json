@@ -1,0 +1,45 @@
+{
+  "family": "findmyjob-staging-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::690637085216:role/findmyjob-staging-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::690637085216:role/findmyjob-staging-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "690637085216.dkr.ecr.ap-south-1.amazonaws.com/findmyjob-api:staging",
+      "portMappings": [{ "containerPort": 8000, "protocol": "tcp" }],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "findmyjob-staging-api",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "api"
+        }
+      },
+      "secrets": [
+        { "name": "MONGODB_URI", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:MONGODB_URI::" },
+        { "name": "MONGODB_DB_NAME", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:MONGODB_DB_NAME::" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:REDIS_URL::" },
+        { "name": "SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:SECRET_KEY::" },
+        { "name": "TOKEN_ENCRYPTION_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:TOKEN_ENCRYPTION_KEY::" },
+        { "name": "GOOGLE_CLIENT_ID", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:GOOGLE_CLIENT_ID::" },
+        { "name": "GOOGLE_CLIENT_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:GOOGLE_CLIENT_SECRET::" },
+        { "name": "GMAIL_OAUTH_REDIRECT_URI", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:GMAIL_OAUTH_REDIRECT_URI::" },
+        { "name": "RAZORPAY_KEY_ID", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:RAZORPAY_KEY_ID::" },
+        { "name": "RAZORPAY_KEY_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:RAZORPAY_KEY_SECRET::" },
+        { "name": "RAZORPAY_WEBHOOK_SECRET", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:RAZORPAY_WEBHOOK_SECRET::" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:OPENAI_API_KEY::" },
+        { "name": "STORAGE_BACKEND", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:STORAGE_BACKEND::" },
+        { "name": "CORS_ORIGINS", "valueFrom": "arn:aws:secretsmanager:ap-south-1:690637085216:secret:findmyjob/staging/app-lLenI3:CORS_ORIGINS::" }
+      ],
+      "environment": [
+        { "name": "ENV", "value": "staging" },
+        { "name": "DEBUG", "value": "true" }
+      ]
+    }
+  ]
+}

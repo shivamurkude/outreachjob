@@ -1,0 +1,66 @@
+# Core API / Server
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+orjson>=3.9.0
+httpx>=0.26.0
+
+# Auth (Google)
+google-auth>=2.27.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
+itsdangerous>=2.1.2
+
+# DB / ODM
+beanie>=1.24.0
+motor>=3.3.0
+pymongo>=4.6.0
+
+# Queue / Scheduler
+redis>=5.0.0
+arq>=0.25.0
+tenacity>=8.2.0
+
+# Gmail API
+google-api-python-client>=2.111.0
+
+# Security
+cryptography>=42.0.0
+python-dotenv>=1.0.0
+
+# Resume parsing
+pypdf>=4.0.0
+python-docx>=1.1.0
+
+# Upload parsing
+openpyxl>=3.1.0
+
+# Verification (MX lookup)
+dnspython>=2.4.0
+
+# Payments
+razorpay>=1.4.0
+
+# LangGraph workflows
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Observability
+structlog>=24.1.0
+sentry-sdk>=1.39.0
+prometheus-client>=0.19.0
+
+# Storage (GCS for prod)
+google-cloud-storage>=2.14.0
+
+# Testing / CI
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-mock>=3.12.0
+respx>=0.20.0
+freezegun>=1.2.0
+ruff>=0.2.0
+mypy>=1.8.0
+pre-commit>=3.6.0
