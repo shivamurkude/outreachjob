@@ -42,12 +42,17 @@ DOCUMENT_MODELS = [
 ]
 
 
+def _use_tls(uri: str) -> bool:
+    """True if URI uses TLS (Atlas or explicit tls=true). Avoids TLS for plain mongodb:// in CI."""
+    return "mongodb+srv://" in uri or "tls=true" in uri.lower()
+
+
 async def init_db() -> None:
     settings = get_settings()
     # tlsCAFile=certifi.where() fixes Atlas SSL handshake (TLSV1_ALERT_INTERNAL_ERROR) in Docker
-    client = AsyncIOMotorClient(
-        settings.mongodb_uri,
-        tlsCAFile=certifi.where(),
-    )
+    kwargs = {}
+    if _use_tls(settings.mongodb_uri):
+        kwargs["tlsCAFile"] = certifi.where()
+    client = AsyncIOMotorClient(settings.mongodb_uri, **kwargs)
     database = client[settings.mongodb_db_name]
     await init_beanie(database=database, document_models=DOCUMENT_MODELS)
