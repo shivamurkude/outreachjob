@@ -38,7 +38,6 @@ log = get_logger(__name__)
 app = FastAPI(
     title="FINDMYJOB v2 API",
     version="2.0.0",
-    default_response_class=None,
 )
 
 app.add_middleware(
