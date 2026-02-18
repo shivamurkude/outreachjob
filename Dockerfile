@@ -1,14 +1,8 @@
 # FINDMYJOB v2 API / Worker (build with --platform linux/amd64 for ECS Fargate)
-FROM python:3.13-slim
+# Use 3.12 bookworm (full) for reliable MongoDB Atlas TLS; slim can cause TLSV1_ALERT_INTERNAL_ERROR
+FROM python:3.12-bookworm
 
 WORKDIR /app
-
-# CA certs and OpenSSL for MongoDB Atlas TLS (avoid SSL handshake errors)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    openssl \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

@@ -1,3 +1,4 @@
+import certifi
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -43,6 +44,10 @@ DOCUMENT_MODELS = [
 
 async def init_db() -> None:
     settings = get_settings()
-    client = AsyncIOMotorClient(settings.mongodb_uri)
+    # tlsCAFile=certifi.where() fixes Atlas SSL handshake (TLSV1_ALERT_INTERNAL_ERROR) in Docker
+    client = AsyncIOMotorClient(
+        settings.mongodb_uri,
+        tlsCAFile=certifi.where(),
+    )
     database = client[settings.mongodb_db_name]
     await init_beanie(database=database, document_models=DOCUMENT_MODELS)
