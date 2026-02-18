@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
 
+from app.core.config import get_settings
 from app.core.security import create_session_cookie
 from app.deps import SESSION_COOKIE_NAME, get_current_user
 from app.models.user import User
 from app.services import users as user_service
 
 router = APIRouter()
+settings = get_settings()
 
 SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
+# Use secure cookie when not in development (staging/prod use HTTPS)
+SECURE_COOKIE = settings.env != "development"
 
 
 class GoogleAuthRequest(BaseModel):
@@ -27,7 +31,7 @@ async def auth_google(body: GoogleAuthRequest, response: Response):
         value=session_value,
         max_age=SESSION_MAX_AGE,
         httponly=True,
-        secure=False,  # set True in prod with HTTPS
+        secure=SECURE_COOKIE,
         samesite="lax",
         path="/",
     )

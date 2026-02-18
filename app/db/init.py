@@ -49,10 +49,11 @@ def _use_tls(uri: str) -> bool:
 
 async def init_db() -> None:
     settings = get_settings()
-    # tlsCAFile=certifi.where() fixes Atlas SSL handshake (TLSV1_ALERT_INTERNAL_ERROR) in Docker
+    # Atlas in Docker: tlsCAFile + tlsDisableOCSPEndpointCheck avoid TLSV1_ALERT_INTERNAL_ERROR
     kwargs = {}
     if _use_tls(settings.mongodb_uri):
         kwargs["tlsCAFile"] = certifi.where()
+        kwargs["tlsDisableOCSPEndpointCheck"] = True
     client = AsyncIOMotorClient(settings.mongodb_uri, **kwargs)
     database = client[settings.mongodb_db_name]
     await init_beanie(database=database, document_models=DOCUMENT_MODELS)

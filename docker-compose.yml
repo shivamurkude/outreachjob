@@ -1,0 +1,7 @@
+# Local dev: Redis only. Backend runs via launch.json or: uvicorn app.main:app --reload --port 8000
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    container_name: findmyjob-redis

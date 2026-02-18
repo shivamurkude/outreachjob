@@ -6,6 +6,10 @@
 .env.production
 !.env.example
 
+# Certificates and keys (do not commit)
+*.pem
+X509-cert-*.pem
+
 # Python
 .venv
 venv
