@@ -2,8 +2,8 @@
 
 from fastapi import Request
 
-from app.core.security import load_session_cookie
 from app.core.exceptions import ForbiddenError, UnauthorizedError
+from app.core.security import load_session_cookie
 from app.models.user import User
 
 SESSION_COOKIE_NAME = "findmyjob_session"

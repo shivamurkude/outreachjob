@@ -18,6 +18,7 @@ class OutreachState(TypedDict):
 
 async def _plan_outreach(state: OutreachState) -> dict:
     from datetime import datetime, timedelta
+
     from app.core.config import get_settings
     from app.models.campaign import Campaign
     from app.models.recipient_item import RecipientItem

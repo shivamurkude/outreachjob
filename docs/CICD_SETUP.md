@@ -20,30 +20,28 @@ Same idea: create an empty repo and use its clone URL. The workflow file is for 
 
 ## 2. Initialise Git and push (first time)
 
-From your project root (`/Users/shivamurkude/Documents/Money`):
+**Already done for you:** The repo has one commit on `main` with all code and CI/CD. The remote is set to `https://github.com/shivamurkude/Money.git`; if your repo is different, run the script below with your URL.
+
+**Create the repo on GitHub** (if you haven’t):
+
+1. [github.com/new](https://github.com/new) → name it (e.g. `Money` or `findmyjob-backend`) → **Create repository** (no README).
+2. Copy the repo URL (e.g. `https://github.com/YOUR_USERNAME/Money.git`).
+
+**Push from your machine:**
 
 ```bash
 cd /Users/shivamurkude/Documents/Money
+./scripts/push-to-github.sh https://github.com/YOUR_USERNAME/YOUR_REPO.git
+```
 
-# Initialise repo (if not already)
-git init
+If `origin` is already correct, just run:
 
-# Add remote (replace with your repo URL)
-git remote add origin https://github.com/YOUR_USER/findmyjob-backend.git
-
-# Stage everything (respects .gitignore)
-git add .
-git status   # confirm no .env or .venv
-
-# First commit
-git commit -m "Initial commit: FINDMYJOB v2 API + staging infra and CI/CD"
-
-# Push (create main branch and set upstream)
-git branch -M main
+```bash
+./scripts/push-to-github.sh
 git push -u origin main
 ```
 
-After this, the **Deploy to Staging** workflow will run (tests, then build + push to ECR + ECS update). It will **fail** until you add AWS secrets in step 3.
+After a successful push, the **Deploy to Staging** workflow runs. It will **fail** until you add AWS secrets (step 3).
 
 ---
 

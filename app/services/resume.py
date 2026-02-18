@@ -1,7 +1,6 @@
 """Resume upload, parsing, and AI analysis."""
 
 from datetime import datetime
-from typing import Any
 
 from beanie import PydanticObjectId
 
@@ -20,7 +19,7 @@ async def count_resume_scans_this_month(user_id: PydanticObjectId) -> int:
     count = await ResumeDocument.find(
         ResumeDocument.user.id == user_id,
         ResumeDocument.created_at >= start,
-        ResumeDocument.ai_analysis != None,
+        ResumeDocument.ai_analysis != None,  # noqa: E711 (Beanie query expr)
     ).count()
     return count
 

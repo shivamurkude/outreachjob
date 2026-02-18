@@ -1,9 +1,13 @@
 """Campaign preview and schedule: recipients, Gmail drafts, credit charge."""
 
+import base64
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from typing import Any
 
 from beanie import PydanticObjectId
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -18,11 +22,6 @@ from app.models.user import User
 from app.services import credits as credits_service
 from app.services.gmail import get_valid_access_token
 from app.services.templates import inject_footer
-
-import base64
-from email.mime.text import MIMEText
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
 
 
 async def create_campaign(
@@ -118,7 +117,7 @@ async def schedule_campaign(
     template = await campaign.template.fetch()
     if not template:
         raise BadRequestError("Template not found")
-    gmail = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)
+    gmail = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)  # noqa: E712
     if not gmail:
         raise BadRequestError("Connect Gmail first")
     if campaign.recipient_source != "list" or not campaign.recipient_list_id:
@@ -147,7 +146,6 @@ async def schedule_campaign(
         reference_id=str(campaign_id),
         idempotency_key=key,
     )
-    user = await User.get(user_id)
     token = await get_valid_access_token(gmail)
     creds = Credentials(token=token)
     service = build("gmail", "v1", credentials=creds)

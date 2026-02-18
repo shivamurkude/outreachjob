@@ -1,12 +1,12 @@
-import hmac
 import hashlib
+import hmac
 import uuid
 from typing import Any
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.core.config import get_settings
-from app.core.exceptions import BadRequestError, UnauthorizedError
+from app.core.exceptions import BadRequestError
 
 
 def get_session_serializer() -> URLSafeTimedSerializer:

@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import BinaryIO
 
 from app.core.config import get_settings

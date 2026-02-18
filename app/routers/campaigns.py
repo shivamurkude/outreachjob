@@ -17,7 +17,6 @@ class CampaignCreate(BaseModel):
 
 @router.get("")
 async def campaigns_list(user: User = Depends(get_current_user)):
-    from beanie import PydanticObjectId
     items = await campaigns_service.list_campaigns(user.id)
     return {
         "campaigns": [

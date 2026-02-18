@@ -4,7 +4,6 @@ from typing import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
 # Use test DB

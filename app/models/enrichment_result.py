@@ -3,8 +3,8 @@ from datetime import datetime
 from beanie import Document, Link
 from pydantic import Field
 
-from app.models.user import User
 from app.models.recipient_item import RecipientItem
+from app.models.user import User
 
 
 class EnrichmentResult(Document):

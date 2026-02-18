@@ -8,7 +8,6 @@ from app.models.credit_balance import CreditBalance
 from app.models.credit_ledger import CreditLedgerEntry
 from app.models.user import User
 
-
 REASONS = ("onboarding_bonus", "purchase", "schedule", "verify", "resume_scan", "refund", "referral")
 
 

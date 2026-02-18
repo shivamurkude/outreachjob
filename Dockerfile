@@ -1,4 +1,4 @@
-# FINDMYJOB v2 API / Worker
+# FINDMYJOB v2 API / Worker (build with --platform linux/amd64 for ECS Fargate)
 FROM python:3.13-slim
 
 WORKDIR /app

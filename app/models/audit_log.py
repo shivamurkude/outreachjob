@@ -1,10 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from beanie import Document, Link
+from beanie import Document
 from pydantic import Field
-
-from app.models.user import User
 
 
 class AuditLog(Document):

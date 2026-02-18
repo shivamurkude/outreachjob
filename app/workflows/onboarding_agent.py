@@ -22,7 +22,7 @@ async def _check_onboarding(state: OnboardingState) -> dict:
 
     user_id = state["user_id"]
     uid = PydanticObjectId(user_id)
-    has_gmail = await GmailAccount.find_one(GmailAccount.user.id == uid, GmailAccount.revoked == False) is not None
+    has_gmail = await GmailAccount.find_one(GmailAccount.user.id == uid, GmailAccount.revoked == False) is not None  # noqa: E712
     has_list = await RecipientList.find_one(RecipientList.user.id == uid) is not None
     has_template = await Template.find_one(Template.user.id == uid) is not None
 

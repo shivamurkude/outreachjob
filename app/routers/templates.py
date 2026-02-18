@@ -33,7 +33,6 @@ class GenerateTemplateRequest(BaseModel):
 @router.get("")
 async def templates_list(user: User = Depends(get_current_user)):
     """List templates for current user."""
-    from beanie import PydanticObjectId
     items = await templates_service.list_templates(user.id)
     return {
         "templates": [
@@ -49,7 +48,6 @@ async def template_create(
     user: User = Depends(get_current_user),
 ):
     """Create template with optional unsubscribe footer."""
-    from beanie import PydanticObjectId
     t = await templates_service.create_template(
         user.id,
         body.name,
@@ -115,7 +113,6 @@ async def template_generate(
   user: User = Depends(get_current_user),
 ):
     """Generate template draft from job title and optional resume summary (AI placeholder)."""
-    from beanie import PydanticObjectId
     out = await templates_service.generate_template_from_resume(
         user.id,
         body.job_title,

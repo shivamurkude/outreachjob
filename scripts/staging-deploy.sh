@@ -11,8 +11,8 @@ ALB_DNS="findmyjob-staging-alb-1315898380.ap-south-1.elb.amazonaws.com"
 echo "1. Logging in to ECR..."
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin 690637085216.dkr.ecr.ap-south-1.amazonaws.com
 
-echo "2. Building Docker image..."
-docker build -t findmyjob-api:staging .
+echo "2. Building Docker image (linux/amd64 for ECS Fargate)..."
+docker build --platform linux/amd64 -t findmyjob-api:staging .
 
 echo "3. Tagging and pushing..."
 docker tag findmyjob-api:staging "$ECR_URI:staging"

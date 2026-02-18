@@ -1,7 +1,6 @@
 """Unit tests for credits service (with in-memory or test DB)."""
 
 import pytest
-from beanie import PydanticObjectId
 
 # Skip if no MongoDB
 pytestmark = pytest.mark.asyncio
@@ -10,7 +9,6 @@ pytestmark = pytest.mark.asyncio
 async def test_get_balance_empty():
     from app.db.init import init_db
     from app.models.user import User
-    from app.models.credit_balance import CreditBalance
     from app.services import credits as credits_service
     await init_db()
     # Create a user

@@ -2,6 +2,7 @@ import time
 import uuid
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
@@ -13,8 +14,22 @@ from app.core.exceptions import (
 )
 from app.core.logging import bind_request_id, configure_logging, get_logger
 from app.db.init import init_db
-from app.routers import admin, auth, campaigns, credits, enrich, gmail, lists, onboarding, payments, referrals, resume, suppressions, templates, verify
-from fastapi.exceptions import RequestValidationError
+from app.routers import (
+    admin,
+    auth,
+    campaigns,
+    credits,
+    enrich,
+    gmail,
+    lists,
+    onboarding,
+    payments,
+    referrals,
+    resume,
+    suppressions,
+    templates,
+    verify,
+)
 
 settings = get_settings()
 configure_logging(debug=settings.debug)

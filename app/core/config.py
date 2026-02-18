@@ -1,14 +1,28 @@
 from functools import lru_cache
-from typing import List
+from typing import Any, List
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_DEFAULT_CORS = ["http://localhost:3000", "http://localhost:5173"]
 
-def _parse_cors_origins(v: str | List[str]) -> List[str]:
-    if isinstance(v, list):
-        return v
-    return [x.strip() for x in v.split(",") if x.strip()]
+
+def _parse_cors_origins(v: Any) -> List[str]:
+    try:
+        if v is None or v == "":
+            return _DEFAULT_CORS.copy()
+        if isinstance(v, list):
+            return [x for x in v if isinstance(x, str) and x.strip()]
+        s = str(v).strip()
+        if not s:
+            return _DEFAULT_CORS.copy()
+        if s.startswith("["):
+            import json
+            out = json.loads(s)
+            return [x for x in out if isinstance(x, str) and x.strip()] or _DEFAULT_CORS.copy()
+        return [x.strip() for x in s.split(",") if x.strip()] or _DEFAULT_CORS.copy()
+    except Exception:
+        return _DEFAULT_CORS.copy()
 
 
 class Settings(BaseSettings):
@@ -58,16 +72,16 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = Field(default=None, alias="SENTRY_DSN")
 
-    # CORS
-    cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"],
+    # CORS: env as string, exposed as list
+    cors_origins_raw: str = Field(
+        default="http://localhost:3000,http://localhost:5173",
+        alias="CORS_ORIGINS",
         description="Comma-separated or JSON list",
     )
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: str | List[str]) -> List[str]:
-        return _parse_cors_origins(v) if v else ["http://localhost:3000", "http://localhost:5173"]
+    @property
+    def cors_origins(self) -> List[str]:
+        return _parse_cors_origins(getattr(self, "cors_origins_raw", None))
 
     # Pricing (credits)
     credits_per_send: int = 5

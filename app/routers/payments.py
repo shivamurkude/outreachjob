@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel
 
-from app.core.exceptions import BadRequestError
 from app.deps import get_current_user
 from app.models.user import User
 from app.services import payments as payments_service

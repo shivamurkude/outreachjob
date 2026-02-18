@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from beanie import Document, Link
 from pydantic import Field
 
-from app.models.user import User
 from app.models.template import Template
+from app.models.user import User
 
 
 class Campaign(Document):

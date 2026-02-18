@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
 
-from app.core.security import create_session_cookie, load_session_cookie
-from app.deps import get_current_user
 from app.core.exceptions import BadRequestError
+from app.deps import get_current_user
 from app.models.user import User
 from app.services import gmail as gmail_service
 
@@ -58,7 +57,7 @@ async def gmail_oauth_callback(
 async def gmail_verify(user: User = Depends(get_current_user)):
     """Verify stored Gmail token by calling Gmail profile."""
     from app.models.gmail_account import GmailAccount
-    account = await GmailAccount.find_one(GmailAccount.user.id == user.id, GmailAccount.revoked == False)
+    account = await GmailAccount.find_one(GmailAccount.user.id == user.id, GmailAccount.revoked == False)  # noqa: E712
     if not account:
         raise BadRequestError("No Gmail account connected")
     profile = await gmail_service.verify_gmail_account(account)

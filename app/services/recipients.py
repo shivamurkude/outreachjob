@@ -9,7 +9,6 @@ from typing import Any
 import openpyxl
 from beanie import PydanticObjectId
 
-from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.recipient_item import RecipientItem
 from app.models.recipient_list import RecipientList
 from app.models.user import User

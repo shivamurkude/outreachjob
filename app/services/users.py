@@ -1,15 +1,14 @@
 from datetime import datetime
 
-from google.oauth2 import id_token
-from app.core.logging import get_logger
-
-log = get_logger(__name__)
 from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, UnauthorizedError
-from app.core.security import create_session_cookie
+from app.core.logging import get_logger
 from app.models.user import User
+
+log = get_logger(__name__)
 
 
 def verify_google_id_token(token: str) -> dict:

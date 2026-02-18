@@ -64,12 +64,20 @@ async def shutdown(ctx: dict) -> None:
 def get_redis_settings() -> RedisSettings:
     from urllib.parse import urlparse
     s = get_settings()
-    u = urlparse(s.redis_url)
+    url = s.redis_url.strip()
+    if url and "://" not in url:
+        url = "redis://" + url
+    u = urlparse(url)
+    db = 0
+    if u.path:
+        path = u.path.lstrip("/")
+        if path.isdigit():
+            db = int(path)
     return RedisSettings(
         host=u.hostname or "localhost",
         port=u.port or 6379,
         password=u.password,
-        database=int(u.path.lstrip("/")) if u.path else 0,
+        database=db,
     )
 
 

@@ -1,12 +1,10 @@
 """Gmail OAuth and token lifecycle."""
 
-from datetime import datetime, timedelta, timezone
-from typing import List
-from urllib.parse import urlencode
+from datetime import datetime, timezone
 
 from beanie import PydanticObjectId
-from google.oauth2.credentials import Credentials
 from google.auth.transport import requests as google_requests
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -74,7 +72,7 @@ async def _store_credentials(
     if not user:
         raise NotFoundError("User not found")
     expiry = credentials.expiry if credentials.expiry else None
-    existing = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)
+    existing = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)  # noqa: E712
     scopes_list = scopes.split() if isinstance(scopes, str) else list(scopes)
     if existing:
         existing.access_token_encrypted = encrypt_token(credentials.token or "")
@@ -156,7 +154,7 @@ async def verify_gmail_account(account: GmailAccount) -> dict:
 
 
 async def disconnect_gmail(user_id: PydanticObjectId) -> None:
-    account = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)
+    account = await GmailAccount.find_one(GmailAccount.user.id == user_id, GmailAccount.revoked == False)  # noqa: E712
     if not account:
         raise NotFoundError("No Gmail account connected")
     account.revoked = True

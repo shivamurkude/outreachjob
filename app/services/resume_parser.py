@@ -1,11 +1,10 @@
 """Parse PDF/DOCX to extracted text and simple fields."""
 
 import io
-from pathlib import Path
 from typing import Any
 
-from pypdf import PdfReader
 from docx import Document as DocxDocument
+from pypdf import PdfReader
 
 from app.core.exceptions import BadRequestError
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from beanie import Indexed, Document, Link
+from beanie import Document, Indexed, Link
 from pydantic import Field
 
 

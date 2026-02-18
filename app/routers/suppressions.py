@@ -42,8 +42,8 @@ async def suppression_remove(
     user: User = Depends(get_current_user),
 ):
     """Remove email from user's suppression list."""
-    from app.models.suppression_entry import SuppressionEntry
     from app.core.exceptions import NotFoundError
+    from app.models.suppression_entry import SuppressionEntry
     email = email.strip().lower()
     entry = await SuppressionEntry.find_one(
         SuppressionEntry.email == email,

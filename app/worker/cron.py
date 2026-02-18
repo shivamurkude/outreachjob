@@ -3,6 +3,8 @@
 from datetime import datetime
 
 import redis.asyncio as aioredis
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -11,11 +13,9 @@ from app.models.scheduled_email import ScheduledEmail
 from app.services.gmail import get_valid_access_token
 from app.services.rate_limit import (
     get_gmail_sent_today,
-    incr_gmail_sent_today,
     gmail_daily_cap,
+    incr_gmail_sent_today,
 )
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 log = get_logger(__name__)
 

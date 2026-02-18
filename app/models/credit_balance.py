@@ -1,5 +1,4 @@
 from beanie import Document, Link
-from pydantic import Field
 
 from app.models.user import User
 

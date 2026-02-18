@@ -1,9 +1,9 @@
 """Email verification: syntax, MX, disposable list."""
 
 import re
-import dns.resolver
 from typing import Literal
 
+import dns.resolver
 from beanie import PydanticObjectId
 
 from app.core.config import get_settings
