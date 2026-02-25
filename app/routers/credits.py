@@ -1,17 +1,21 @@
 from fastapi import APIRouter, Depends, Query
 
+from app.core.logging import get_logger
 from app.deps import get_current_user
 from app.models.credit_ledger import CreditLedgerEntry
 from app.models.user import User
 from app.services import credits as credits_service
 
 router = APIRouter()
+log = get_logger(__name__)
 
 
 @router.get("/balance")
 async def credits_balance(user: User = Depends(get_current_user)):
     """Return current credit balance."""
+    log.info("credits_balance", user_id=str(user.id))
     balance = await credits_service.get_balance(user.id)
+    log.info("credits_balance_ok", user_id=str(user.id), balance=balance)
     return {"balance": balance}
 
 
@@ -22,6 +26,7 @@ async def credits_ledger(
     offset: int = Query(0, ge=0),
 ):
     """Return ledger entries for current user (newest first)."""
+    log.info("credits_ledger", user_id=str(user.id), limit=limit, offset=offset)
     entries = (
         await CreditLedgerEntry.find(CreditLedgerEntry.user.id == user.id)
         .sort(-CreditLedgerEntry.created_at)
@@ -41,4 +46,5 @@ async def credits_ledger(
         }
         for e in entries
     ]
+    log.info("credits_ledger_ok", user_id=str(user.id), count=len(out))
     return {"entries": out, "limit": limit, "offset": offset}

@@ -7,9 +7,13 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def get_session_serializer() -> URLSafeTimedSerializer:
+    log.debug("get_session_serializer")
     settings = get_settings()
     return URLSafeTimedSerializer(
         settings.secret_key,
@@ -19,24 +23,31 @@ def get_session_serializer() -> URLSafeTimedSerializer:
 
 
 def create_session_cookie(payload: dict[str, Any], max_age_seconds: int = 7 * 24 * 3600) -> str:
+    """Sign payload for session cookie. Expiration is enforced when loading via max_age in loads()."""
+    log.debug("create_session_cookie")
     serializer = get_session_serializer()
-    return serializer.dumps(payload, max_age=max_age_seconds)
+    return serializer.dumps(payload)
 
 
 def load_session_cookie(cookie_value: str) -> dict[str, Any] | None:
+    log.debug("load_session_cookie")
     serializer = get_session_serializer()
     try:
-        return serializer.loads(cookie_value, max_age=7 * 24 * 3600)
+        out = serializer.loads(cookie_value, max_age=7 * 24 * 3600)
+        log.debug("load_session_cookie_ok")
+        return out
     except (BadSignature, SignatureExpired):
+        log.debug("load_session_cookie_invalid_or_expired")
         return None
 
 
-# Idempotency: store key -> result in Redis or Mongo; same key returns same result
 def generate_idempotency_key() -> str:
+    log.debug("generate_idempotency_key")
     return str(uuid.uuid4())
 
 
 def verify_razorpay_webhook(payload: bytes, signature: str, secret: str) -> bool:
+    log.debug("verify_razorpay_webhook")
     expected = hmac.new(
         secret.encode("utf-8"),
         payload,
@@ -46,6 +57,7 @@ def verify_razorpay_webhook(payload: bytes, signature: str, secret: str) -> bool
 
 
 def require_idempotency_key(key: str | None) -> str:
+    log.debug("require_idempotency_key", has_key=bool(key and key.strip()))
     if not key or not key.strip():
         raise BadRequestError("Idempotency-Key header is required for this request")
     return key.strip()

@@ -4,17 +4,22 @@ from beanie import PydanticObjectId
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError
+from app.core.logging import get_logger
 from app.models.credit_balance import CreditBalance
 from app.models.credit_ledger import CreditLedgerEntry
 from app.models.user import User
 
+log = get_logger(__name__)
 REASONS = ("onboarding_bonus", "purchase", "schedule", "verify", "resume_scan", "refund", "referral")
 
 
 async def get_balance(user_id: PydanticObjectId) -> int:
     """Return current balance for user (0 if no record)."""
+    log.debug("get_balance", user_id=str(user_id))
     bal = await CreditBalance.find_one(CreditBalance.user.id == user_id)
-    return bal.balance if bal else 0
+    out = bal.balance if bal else 0
+    log.debug("get_balance_ok", user_id=str(user_id), balance=out)
+    return out
 
 
 async def apply_ledger_entry(
@@ -30,10 +35,13 @@ async def apply_ledger_entry(
     Returns (ledger_entry, balance_after).
     Idempotency: if idempotency_key is set and an entry already exists for this key, return existing and do not double-apply.
     """
+    log.info("apply_ledger_entry", user_id=str(user_id), amount=amount, reason=reason, idempotency_key=idempotency_key)
     if reason not in REASONS:
+        log.warning("apply_ledger_entry_invalid_reason", reason=reason)
         raise BadRequestError(f"Invalid reason: {reason}")
     user = await User.get(user_id)
     if not user:
+        log.warning("apply_ledger_entry_user_not_found", user_id=str(user_id))
         raise BadRequestError("User not found")
     if idempotency_key:
         existing = await CreditLedgerEntry.find_one(
@@ -41,14 +49,15 @@ async def apply_ledger_entry(
             CreditLedgerEntry.idempotency_key == idempotency_key,
         )
         if existing:
+            log.info("apply_ledger_entry_idempotent_skip", user_id=str(user_id), idempotency_key=idempotency_key)
             return existing, await get_balance(user_id)
 
     current_balance = await get_balance(user_id)
     balance_after = current_balance + amount
     if balance_after < 0:
+        log.warning("apply_ledger_entry_insufficient", user_id=str(user_id), current=current_balance, amount=amount)
         raise BadRequestError("Insufficient credits")
 
-    # Upsert balance and insert ledger in sequence (single-doc atomic for balance)
     balance_doc = await CreditBalance.find_one(CreditBalance.user.id == user_id)
     if not balance_doc:
         balance_doc = CreditBalance(user=user, balance=0)
@@ -66,14 +75,18 @@ async def apply_ledger_entry(
         idempotency_key=idempotency_key,
     )
     await entry.insert()
+    log.info("apply_ledger_entry_ok", user_id=str(user_id), reason=reason, balance_after=balance_after)
     return entry, balance_after
 
 
 def get_pricing():
+    log.debug("get_pricing")
     s = get_settings()
-    return {
+    out = {
         "send": s.credits_per_send,
         "verify": s.credits_per_verify,
         "resume_scan": s.credits_per_resume_scan,
         "free_resume_scans_per_month": s.free_resume_scans_per_month,
     }
+    log.debug("get_pricing_ok", **out)
+    return out

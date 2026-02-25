@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.core.exceptions import BadRequestError
+from app.core.logging import get_logger
 from app.deps import get_current_user
 from app.models.user import User
 from app.services import templates as templates_service
 
 router = APIRouter()
+log = get_logger(__name__)
 
 
 class TemplateCreate(BaseModel):
@@ -33,7 +35,9 @@ class GenerateTemplateRequest(BaseModel):
 @router.get("")
 async def templates_list(user: User = Depends(get_current_user)):
     """List templates for current user."""
+    log.info("templates_list", user_id=str(user.id))
     items = await templates_service.list_templates(user.id)
+    log.info("templates_list_ok", user_id=str(user.id), count=len(items))
     return {
         "templates": [
             {"id": str(t.id), "name": t.name, "subject": t.subject, "updated_at": t.updated_at.isoformat()}
@@ -48,6 +52,7 @@ async def template_create(
     user: User = Depends(get_current_user),
 ):
     """Create template with optional unsubscribe footer."""
+    log.info("template_create", user_id=str(user.id), name=body.name)
     t = await templates_service.create_template(
         user.id,
         body.name,
@@ -56,11 +61,13 @@ async def template_create(
         body_text=body.body_text,
         unsubscribe_footer=body.unsubscribe_footer,
     )
+    log.info("template_create_ok", user_id=str(user.id), template_id=str(t.id))
     return {"id": str(t.id), "name": t.name, "subject": t.subject, "created_at": t.created_at.isoformat()}
 
 
 @router.get("/{template_id}")
 async def template_get(template_id: str, user: User = Depends(get_current_user)):
+    log.info("template_get", user_id=str(user.id), template_id=template_id)
     from beanie import PydanticObjectId
     t = await templates_service.get_template(PydanticObjectId(template_id), user.id)
     if not t:
@@ -83,6 +90,7 @@ async def template_update(
     body: TemplateUpdate,
     user: User = Depends(get_current_user),
 ):
+    log.info("template_update", user_id=str(user.id), template_id=template_id)
     from beanie import PydanticObjectId
     t = await templates_service.update_template(
         PydanticObjectId(template_id),
@@ -100,6 +108,7 @@ async def template_update(
 
 @router.delete("/{template_id}")
 async def template_delete(template_id: str, user: User = Depends(get_current_user)):
+    log.info("template_delete", user_id=str(user.id), template_id=template_id)
     from beanie import PydanticObjectId
     ok = await templates_service.delete_template(PydanticObjectId(template_id), user.id)
     if not ok:
@@ -113,6 +122,7 @@ async def template_generate(
   user: User = Depends(get_current_user),
 ):
     """Generate template draft from job title and optional resume summary (AI placeholder)."""
+    log.info("template_generate", user_id=str(user.id), job_title=body.job_title)
     out = await templates_service.generate_template_from_resume(
         user.id,
         body.job_title,

@@ -9,11 +9,13 @@ from typing import Any
 import openpyxl
 from beanie import PydanticObjectId
 
+from app.core.logging import get_logger
 from app.models.recipient_item import RecipientItem
 from app.models.recipient_list import RecipientList
 from app.models.user import User
 from app.storage.base import get_storage
 
+log = get_logger(__name__)
 EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
 
 
@@ -29,6 +31,7 @@ def extract_domain(email: str) -> str:
 
 async def upload_list(user: User, name: str, file_content: bytes, filename: str) -> RecipientList:
     """Save file to storage and create RecipientList with status=processing."""
+    log.info("upload_list", user_id=str(user.id), name=name, filename=filename, size=len(file_content))
     storage = get_storage()
     key = f"lists/{user.id}/{name or filename}"
     await storage.put(key, file_content)
@@ -39,16 +42,21 @@ async def upload_list(user: User, name: str, file_content: bytes, filename: str)
         status="processing",
     )
     await rlist.insert()
+    log.info("upload_list_ok", user_id=str(user.id), list_id=str(rlist.id))
     return rlist
 
 
 def parse_csv(content: bytes) -> list[dict[str, Any]]:
+    log.debug("parse_csv", size=len(content))
     text = content.decode("utf-8", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
-    return list(reader)
+    rows = list(reader)
+    log.debug("parse_csv_ok", rows=len(rows))
+    return rows
 
 
 def parse_xlsx(content: bytes) -> list[dict[str, Any]]:
+    log.debug("parse_xlsx", size=len(content))
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
     if not ws:
@@ -57,10 +65,13 @@ def parse_xlsx(content: bytes) -> list[dict[str, Any]]:
     if not rows:
         return []
     headers = [str(h).strip() if h is not None else f"col{i}" for i, h in enumerate(rows[0])]
-    return [dict(zip(headers, row)) for row in rows[1:] if any(v is not None for v in row)]
+    out = [dict(zip(headers, row)) for row in rows[1:] if any(v is not None for v in row)]
+    log.debug("parse_xlsx_ok", rows=len(out))
+    return out
 
 
 def find_email_column(row: dict) -> str | None:
+    log.debug("find_email_column")
     for k, v in row.items():
         if v and isinstance(v, str) and "@" in v and EMAIL_RE.match(v.strip()):
             return v.strip().lower()
@@ -77,11 +88,13 @@ async def process_recipient_list_upload(list_id: str) -> None:
     """
     ARQ job: load file from storage, parse CSV/XLSX, create RecipientItems, update list status.
     """
+    log.info("process_recipient_list_upload", list_id=list_id)
     from app.db.init import init_db
     await init_db()
 
     rlist = await RecipientList.get(list_id)
     if not rlist or rlist.status != "processing":
+        log.debug("process_recipient_list_upload_skip", list_id=list_id, status=getattr(rlist, "status", None))
         return
     storage = get_storage()
     try:
@@ -133,13 +146,17 @@ async def process_recipient_list_upload(list_id: str) -> None:
     rlist.status = "ready"
     rlist.updated_at = datetime.utcnow()
     await rlist.save()
+    log.info("process_recipient_list_upload_ok", list_id=list_id, total=len(rows), valid=valid, invalid=invalid)
 
 
 async def get_list(user_id: PydanticObjectId, list_id: PydanticObjectId) -> RecipientList | None:
-    return await RecipientList.find_one(
+    log.debug("get_list", user_id=str(user_id), list_id=str(list_id))
+    rlist = await RecipientList.find_one(
         RecipientList.id == list_id,
         RecipientList.user.id == user_id,
     )
+    log.debug("get_list_ok", list_id=str(list_id), found=rlist is not None)
+    return rlist
 
 
 async def get_list_items(
@@ -147,9 +164,7 @@ async def get_list_items(
     limit: int = 100,
     offset: int = 0,
 ) -> list[RecipientItem]:
-    return (
-        await RecipientItem.find(RecipientItem.list.id == list_id)
-        .skip(offset)
-        .limit(limit)
-        .to_list()
-    )
+    log.debug("get_list_items", list_id=str(list_id), limit=limit, offset=offset)
+    items = await RecipientItem.find(RecipientItem.list.id == list_id).skip(offset).limit(limit).to_list()
+    log.debug("get_list_items_ok", list_id=str(list_id), count=len(items))
+    return items

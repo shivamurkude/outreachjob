@@ -57,13 +57,28 @@ async def request_id_middleware(request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
-    log.info(
-        "request",
-        method=request.method,
-        path=request.url.path,
-        status_code=response.status_code,
-        duration_ms=round(duration_ms, 2),
+    # 401 on GET /v1/auth/me is expected when not logged in; log at DEBUG to reduce noise
+    is_unauth_me = (
+        request.method == "GET"
+        and request.url.path == "/v1/auth/me"
+        and response.status_code == 401
     )
+    if is_unauth_me:
+        log.debug(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round(duration_ms, 2),
+        )
+    else:
+        log.info(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round(duration_ms, 2),
+        )
     response.headers["X-Request-ID"] = request_id
     return response
 

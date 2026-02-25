@@ -11,6 +11,7 @@ from googleapiclient.discovery import build
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.logging import get_logger
 from app.core.security import generate_idempotency_key
 from app.models.campaign import Campaign
 from app.models.gmail_account import GmailAccount
@@ -23,6 +24,8 @@ from app.services import credits as credits_service
 from app.services.gmail import get_valid_access_token
 from app.services.templates import inject_footer
 
+log = get_logger(__name__)
+
 
 async def create_campaign(
     user_id: PydanticObjectId,
@@ -31,6 +34,7 @@ async def create_campaign(
     recipient_source: str = "list",
     recipient_list_id: str | None = None,
 ) -> Campaign:
+    log.info("create_campaign", user_id=str(user_id), name=name, template_id=str(template_id))
     user = await User.get(user_id)
     if not user:
         raise NotFoundError("User not found")
@@ -45,18 +49,25 @@ async def create_campaign(
         recipient_list_id=recipient_list_id,
     )
     await c.insert()
+    log.info("create_campaign_ok", user_id=str(user_id), campaign_id=str(c.id))
     return c
 
 
 async def list_campaigns(user_id: PydanticObjectId) -> list[Campaign]:
-    return await Campaign.find(Campaign.user.id == user_id).to_list()
+    log.debug("list_campaigns", user_id=str(user_id))
+    items = await Campaign.find(Campaign.user.id == user_id).to_list()
+    log.debug("list_campaigns_ok", user_id=str(user_id), count=len(items))
+    return items
 
 
 async def get_campaign(campaign_id: PydanticObjectId, user_id: PydanticObjectId) -> Campaign | None:
-    return await Campaign.find_one(
+    log.debug("get_campaign", campaign_id=str(campaign_id), user_id=str(user_id))
+    c = await Campaign.find_one(
         Campaign.id == campaign_id,
         Campaign.user.id == user_id,
     )
+    log.debug("get_campaign_ok", campaign_id=str(campaign_id), found=c is not None)
+    return c
 
 
 async def preview_campaign(
@@ -64,6 +75,7 @@ async def preview_campaign(
     user_id: PydanticObjectId,
 ) -> dict[str, Any]:
     """Return recipient count and credit estimate for scheduling."""
+    log.info("preview_campaign", campaign_id=str(campaign_id), user_id=str(user_id))
     campaign = await get_campaign(campaign_id, user_id)
     if not campaign:
         raise NotFoundError("Campaign not found")
@@ -85,6 +97,7 @@ async def preview_campaign(
     else:
         count = 0
     credits_needed = count * get_settings().credits_per_send
+    log.info("preview_campaign_ok", campaign_id=str(campaign_id), recipient_count=count, credits_required=credits_needed)
     return {
         "recipient_count": count,
         "credits_required": credits_needed,
@@ -93,6 +106,7 @@ async def preview_campaign(
 
 
 def _make_message(to: str, subject: str, body_html: str) -> dict:
+    log.debug("_make_message", to=to[:50], subject=subject[:50])
     message = MIMEText(body_html, "html")
     message["to"] = to
     message["subject"] = subject
@@ -106,9 +120,10 @@ async def schedule_campaign(
     idempotency_key: str | None = None,
 ) -> dict[str, Any]:
     """
-    Create Gmail drafts for each recipient, create ScheduledEmail records,
-    charge credits. Worker will send at send_at via Gmail API.
+    Schedule emails on Gmail only: create drafts in Gmail (OAuth) or store schedule records (app-password).
+    We do not send any email; Gmail server is used for scheduling only.
     """
+    log.info("schedule_campaign", campaign_id=str(campaign_id), user_id=str(user_id))
     campaign = await get_campaign(campaign_id, user_id)
     if not campaign:
         raise NotFoundError("Campaign not found")
@@ -146,35 +161,57 @@ async def schedule_campaign(
         reference_id=str(campaign_id),
         idempotency_key=key,
     )
-    token = await get_valid_access_token(gmail)
-    creds = Credentials(token=token)
-    service = build("gmail", "v1", credentials=creds)
     body_with_footer = inject_footer(template.body_html, template.unsubscribe_footer)
     send_at = datetime.utcnow() + timedelta(minutes=1)
     created = 0
-    for item in items:
-        to = item.chosen_email or item.email
-        subject = template.subject
-        msg = _make_message(to, subject, body_with_footer)
-        try:
-            draft = service.users().drafts().create(userId="me", body={"message": msg}).execute()
-            draft_id = draft["id"]
-        except Exception:
-            continue
-        s = ScheduledEmail(
-            campaign=campaign,
-            gmail_account=gmail,
-            recipient_email=to,
-            subject=subject,
-            body_html=body_with_footer,
-            send_at=send_at,
-            status="drafted",
-            gmail_draft_id=draft_id,
-            idempotency_key=key,
-        )
-        await s.insert()
-        created += 1
-        send_at = send_at + timedelta(seconds=30)
+    use_smtp = getattr(gmail, "auth_type", "oauth") == "app_password"
+    if use_smtp:
+        # App-password accounts: no draft; store payload and send via SMTP in cron
+        for item in items:
+            to = item.chosen_email or item.email
+            subject = template.subject
+            s = ScheduledEmail(
+                campaign=campaign,
+                gmail_account=gmail,
+                recipient_email=to,
+                subject=subject,
+                body_html=body_with_footer,
+                send_at=send_at,
+                status="drafted",
+                gmail_draft_id=None,
+                idempotency_key=key,
+            )
+            await s.insert()
+            created += 1
+            send_at = send_at + timedelta(seconds=30)
+    else:
+        # OAuth: create Gmail drafts and store draft_id
+        token = await get_valid_access_token(gmail)
+        creds = Credentials(token=token)
+        service = build("gmail", "v1", credentials=creds)
+        for item in items:
+            to = item.chosen_email or item.email
+            subject = template.subject
+            msg = _make_message(to, subject, body_with_footer)
+            try:
+                draft = service.users().drafts().create(userId="me", body={"message": msg}).execute()
+                draft_id = draft["id"]
+            except Exception:
+                continue
+            s = ScheduledEmail(
+                campaign=campaign,
+                gmail_account=gmail,
+                recipient_email=to,
+                subject=subject,
+                body_html=body_with_footer,
+                send_at=send_at,
+                status="drafted",
+                gmail_draft_id=draft_id,
+                idempotency_key=key,
+            )
+            await s.insert()
+            created += 1
+            send_at = send_at + timedelta(seconds=30)
     campaign.scheduled_count += created
     campaign.status = "scheduled"
     from datetime import datetime as dt
@@ -184,4 +221,5 @@ async def schedule_campaign(
     await log_event(str(user_id), "campaign_scheduled", "campaign", str(campaign_id), {"scheduled_count": created})
     from app.services.referrals import grant_referral_reward_if_eligible
     await grant_referral_reward_if_eligible(user_id)
+    log.info("schedule_campaign_ok", campaign_id=str(campaign_id), user_id=str(user_id), scheduled=created)
     return {"scheduled": created, "idempotency_key": key}

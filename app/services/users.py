@@ -13,6 +13,7 @@ log = get_logger(__name__)
 
 def verify_google_id_token(token: str) -> dict:
     """Verify Google ID token; return decoded claims (sub, email, name, picture, etc.)."""
+    log.debug("verify_google_id_token")
     settings = get_settings()
     try:
         claims = id_token.verify_oauth2_token(
@@ -22,10 +23,12 @@ def verify_google_id_token(token: str) -> dict:
         )
         return claims
     except Exception as e:
+        log.warning("verify_google_id_token_failed", reason=str(e)[:100])
         raise UnauthorizedError(f"Invalid Google token: {e}") from e
 
 
 async def upsert_user_from_google(claims: dict) -> User:
+    log.debug("upsert_user_from_google", sub=claims.get("sub", "")[:20] if claims.get("sub") else None)
     google_sub = claims.get("sub")
     if not google_sub:
         raise BadRequestError("Missing sub in token")
@@ -60,4 +63,5 @@ async def upsert_user_from_google(claims: dict) -> User:
 
 
 def session_payload_for_user(user: User) -> dict:
+    log.debug("session_payload_for_user", user_id=str(user.id))
     return {"user_id": str(user.id), "session_version": user.session_version}

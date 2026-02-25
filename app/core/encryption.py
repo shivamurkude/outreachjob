@@ -7,9 +7,13 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.core.config import get_settings
 from app.core.exceptions import BadRequestError
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def _get_fernet() -> Fernet:
+    log.debug("_get_fernet")
     settings = get_settings()
     key = settings.token_encryption_key
     if not key or (isinstance(key, str) and len(key) != 44):
@@ -24,6 +28,7 @@ def _get_fernet() -> Fernet:
 
 
 def encrypt_token(plain: str) -> str:
+    log.debug("encrypt_token", has_plain=bool(plain))
     if not plain:
         return ""
     f = _get_fernet()
@@ -31,10 +36,12 @@ def encrypt_token(plain: str) -> str:
 
 
 def decrypt_token(encrypted: str) -> str:
+    log.debug("decrypt_token", has_encrypted=bool(encrypted))
     if not encrypted:
         return ""
     f = _get_fernet()
     try:
         return f.decrypt(encrypted.encode()).decode()
     except InvalidToken:
+        log.debug("decrypt_token_invalid")
         return ""

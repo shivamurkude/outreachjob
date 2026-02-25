@@ -2,7 +2,10 @@
 
 from typing import Any
 
+from app.core.logging import get_logger
 from app.models.audit_log import AuditLog
+
+log = get_logger(__name__)
 
 
 async def log_event(
@@ -13,6 +16,7 @@ async def log_event(
     metadata: dict[str, Any] | None = None,
 ) -> None:
     """Append to audit_logs collection."""
+    log.debug("log_event", user_id=user_id, event_type=event_type, entity_type=entity_type, entity_id=entity_id)
     await AuditLog(
         user_id=user_id,
         event_type=event_type,

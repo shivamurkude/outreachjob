@@ -5,6 +5,10 @@ from typing import TypedDict
 from beanie import PydanticObjectId
 from langgraph.graph import END, START, StateGraph
 
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
+
 
 class OnboardingState(TypedDict):
     user_id: str
@@ -16,6 +20,7 @@ class OnboardingState(TypedDict):
 
 
 async def _check_onboarding(state: OnboardingState) -> dict:
+    log.debug("_check_onboarding", user_id=state.get("user_id"))
     from app.models.gmail_account import GmailAccount
     from app.models.recipient_list import RecipientList
     from app.models.template import Template
@@ -35,6 +40,7 @@ async def _check_onboarding(state: OnboardingState) -> dict:
     else:
         next_step = "create_campaign"
     completed = has_gmail and has_list and has_template
+    log.debug("_check_onboarding_ok", user_id=user_id, next_step=next_step, completed=completed)
     return {
         "has_gmail": has_gmail,
         "has_list": has_list,
@@ -45,6 +51,7 @@ async def _check_onboarding(state: OnboardingState) -> dict:
 
 
 def build_onboarding_graph():
+    log.debug("build_onboarding_graph")
     builder = StateGraph(OnboardingState)
     builder.add_node("check", _check_onboarding)
     builder.add_edge(START, "check")
@@ -54,6 +61,7 @@ def build_onboarding_graph():
 
 async def run_onboarding(user_id: str) -> dict:
     """Run onboarding agent; return state with next_step and flags."""
+    log.info("run_onboarding", user_id=user_id)
     graph = build_onboarding_graph()
     initial: OnboardingState = {
         "user_id": user_id,
@@ -64,4 +72,5 @@ async def run_onboarding(user_id: str) -> dict:
         "completed": False,
     }
     result = await graph.ainvoke(initial)
+    log.info("run_onboarding_ok", user_id=user_id, next_step=result.get("next_step"))
     return dict(result)

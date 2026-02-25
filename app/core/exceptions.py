@@ -61,10 +61,22 @@ def error_response(request: Request, exc: AppError) -> ORJSONResponse:
 
 
 async def app_exception_handler(request: Request, exc: AppError) -> ORJSONResponse:
+    from app.core.logging import get_logger
+    path = getattr(request.url, "path", "")
+    get_logger(__name__).info(
+        "api_error",
+        path=path,
+        code=exc.code,
+        status_code=exc.status_code,
+        message=exc.message[:200] if exc.message else "",
+    )
     return error_response(request, exc)
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> ORJSONResponse:
+    from app.core.logging import get_logger
+    path = getattr(request.url, "path", "")
+    get_logger(__name__).info("api_validation_error", path=path, error_count=len(exc.errors()))
     body = {
         "error": {
             "message": "Validation error",

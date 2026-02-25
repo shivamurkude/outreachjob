@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from typing import BinaryIO
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 
 class StorageBackend(ABC):
@@ -22,6 +25,7 @@ class StorageBackend(ABC):
 
 
 def get_storage() -> StorageBackend:
+    log.debug("get_storage")
     settings = get_settings()
     if settings.storage_backend == "gcs":
         from app.storage.gcs import GCSStorage

@@ -47,6 +47,9 @@ razorpay>=1.4.0
 # LangGraph workflows
 langgraph>=0.2.0
 langchain-core>=0.3.0
+# LangChain + OpenAI (resume analysis with structured output)
+langchain-openai>=0.2.0
+openai>=1.0.0
 
 # Observability
 structlog>=24.1.0
