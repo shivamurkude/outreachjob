@@ -13,6 +13,7 @@ class ResumeDocument(Document):
     filename: str
     extracted_fields: dict[str, Any] = Field(default_factory=dict)
     ai_analysis: dict[str, Any] | None = None
+    content_hash: str | None = None  # SHA256 for duplicate detection
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

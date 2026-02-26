@@ -58,7 +58,7 @@ async def handle_webhook(payload: bytes, signature: str) -> None:
     user_id = po.user.ref
     idempotency_key = f"razorpay_{payment_id}"
     existing = await CreditLedgerEntry.find_one(
-        CreditLedgerEntry.user.id == user_id,
+        CreditLedgerEntry.user.ref == user_id,
         CreditLedgerEntry.idempotency_key == idempotency_key,
     )
     if existing:
@@ -70,7 +70,7 @@ async def handle_webhook(payload: bytes, signature: str) -> None:
         credits = amount // 250  # 1 credit per ₹2.5 approx, or define mapping
     # First purchase bonus
     count = await CreditLedgerEntry.find(
-        CreditLedgerEntry.user.id == user_id,
+        CreditLedgerEntry.user.ref == user_id,
         CreditLedgerEntry.reason == "purchase",
     ).count()
     if count == 0:

@@ -10,13 +10,14 @@ from app.models.credit_ledger import CreditLedgerEntry
 from app.models.user import User
 
 log = get_logger(__name__)
-REASONS = ("onboarding_bonus", "purchase", "schedule", "verify", "resume_scan", "refund", "referral")
+REASONS = ("signup", "onboarding_bonus", "purchase", "schedule", "verify", "resume_scan", "refund", "referral")
 
 
 async def get_balance(user_id: PydanticObjectId) -> int:
     """Return current balance for user (0 if no record)."""
     log.debug("get_balance", user_id=str(user_id))
-    bal = await CreditBalance.find_one(CreditBalance.user.id == user_id)
+    # Query by .ref so we match how Beanie stores Link[User]
+    bal = await CreditBalance.find_one(CreditBalance.user.ref == user_id)
     out = bal.balance if bal else 0
     log.debug("get_balance_ok", user_id=str(user_id), balance=out)
     return out
@@ -45,7 +46,7 @@ async def apply_ledger_entry(
         raise BadRequestError("User not found")
     if idempotency_key:
         existing = await CreditLedgerEntry.find_one(
-            CreditLedgerEntry.user.id == user_id,
+            CreditLedgerEntry.user.ref == user_id,
             CreditLedgerEntry.idempotency_key == idempotency_key,
         )
         if existing:
@@ -58,10 +59,11 @@ async def apply_ledger_entry(
         log.warning("apply_ledger_entry_insufficient", user_id=str(user_id), current=current_balance, amount=amount)
         raise BadRequestError("Insufficient credits")
 
-    balance_doc = await CreditBalance.find_one(CreditBalance.user.id == user_id)
+    balance_doc = await CreditBalance.find_one(CreditBalance.user.ref == user_id)
     if not balance_doc:
+        from beanie import WriteRules
         balance_doc = CreditBalance(user=user, balance=0)
-        await balance_doc.insert()
+        await balance_doc.insert(link_rule=WriteRules.DO_NOTHING)
     balance_doc.balance = balance_after
     await balance_doc.save()
 

@@ -17,6 +17,13 @@ class User(Document):
     last_login_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Step 0 compliance
+    attested_outreach_allowed: bool = False
+    attested_at: datetime | None = None
+    timezone: str = "UTC"
+    locale: str = "en"
+    # Onboarding completed when first campaign is scheduled
+    onboarding_completed_at: datetime | None = None
 
     class Settings:
         name = "users"

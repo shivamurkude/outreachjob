@@ -19,10 +19,14 @@ class ResumeAnalysisSchema(BaseModel):
     experience_years: float | None = Field(default=None, description="Total years of work experience if inferable, else null")
     education: list[str] = Field(default_factory=list, description="Degrees and certifications, e.g. B.Tech Computer Science - XYZ University")
     job_titles: list[str] = Field(default_factory=list, description="Roles held, e.g. Software Engineer, Intern")
+    resume_score: int | None = Field(default=None, description="Overall resume strength 0-100 based on clarity, relevance, experience; null if not inferable")
+    suggested_job_titles: list[str] = Field(default_factory=list, description="Job titles to apply for based on profile, e.g. Senior Software Engineer, Backend Developer")
+    target_recruiter_roles: list[str] = Field(default_factory=list, description="Recruiter/HR roles to contact, e.g. HR Manager, Talent Acquisition, Recruiter")
 
 
 RESUME_ANALYSIS_SYSTEM = """You are an expert resume analyst. Extract structured information from the resume text.
-Fill every field based on the content. Use empty list or null only when the information is not present in the resume."""
+Fill every field based on the content. Use empty list or null only when the information is not present in the resume.
+For resume_score give an integer 0-100 based on clarity, completeness, and relevance. For suggested_job_titles recommend 3-5 roles the candidate could apply for. For target_recruiter_roles list who they should contact (e.g. HR Manager, Recruiter, Talent Acquisition)."""
 
 RESUME_ANALYSIS_USER_TEMPLATE = """Extract the following from this resume text:
 
@@ -67,6 +71,9 @@ def analyze_resume_with_openai(raw_text: str) -> dict[str, Any]:
             "experience_years": float(result.experience_years) if result.experience_years is not None else None,
             "education": [e.strip() for e in (result.education or []) if e and e.strip()],
             "job_titles": [j.strip() for j in (result.job_titles or []) if j and j.strip()],
+            "resume_score": int(result.resume_score) if result.resume_score is not None else None,
+            "suggested_job_titles": [j.strip() for j in (result.suggested_job_titles or []) if j and j.strip()],
+            "target_recruiter_roles": [r.strip() for r in (result.target_recruiter_roles or []) if r and r.strip()],
         }
         log.info(
             "analyze_resume_with_openai_ok",
@@ -86,4 +93,7 @@ def _empty_analysis() -> dict[str, Any]:
         "experience_years": None,
         "education": [],
         "job_titles": [],
+        "resume_score": None,
+        "suggested_job_titles": [],
+        "target_recruiter_roles": [],
     }

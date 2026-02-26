@@ -1,5 +1,6 @@
 """Gmail OAuth, app password, and token lifecycle."""
 
+import base64
 import smtplib
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
@@ -15,19 +16,27 @@ from app.core.config import get_settings
 from app.core.encryption import decrypt_token, encrypt_token
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.logging import get_logger
-from app.models.gmail_account import GmailAccount
+from app.models.gmail_account import (
+    GMAIL_PERSONAL_DAILY_LIMIT,
+    GMAIL_WORKSPACE_DAILY_LIMIT,
+    GmailAccount,
+)
 from app.models.user import User
 
 log = get_logger(__name__)
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_PORT = 587
+# Heuristic: messagesTotal below this suggests new account
+GMAIL_NEW_ACCOUNT_MESSAGES_THRESHOLD = 30
 
+# Order must match Google token response to avoid oauthlib "scope has changed" error
 GMAIL_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/userinfo.profile",
+    "openid",
 ]
 
 
@@ -74,6 +83,41 @@ async def exchange_code_and_save(user_id: PydanticObjectId, code: str, redirect_
     return account
 
 
+def _daily_send_limit_for_email(email: str) -> int:
+    """Personal @gmail.com = 500, Workspace/other = 2000."""
+    if not email or "@" not in email:
+        return GMAIL_PERSONAL_DAILY_LIMIT
+    domain = email.split("@", 1)[1].lower()
+    if domain == "gmail.com":
+        return GMAIL_PERSONAL_DAILY_LIMIT
+    return GMAIL_WORKSPACE_DAILY_LIMIT
+
+
+async def _ensure_email_not_linked_to_other_user(email: str, current_user_id: PydanticObjectId) -> None:
+    """
+    Raise BadRequestError if this email is already linked to a different user.
+    If the other user was deleted (orphan GmailAccount), remove the orphan and allow the link.
+    """
+    other = await GmailAccount.find_one(
+        GmailAccount.email == email.strip().lower(),
+        GmailAccount.revoked == False,  # noqa: E712
+    )
+    if not other:
+        return
+    other_user_id = other.user.ref
+    if str(other_user_id) == str(current_user_id):
+        return
+    # Other user exists? If not (account was deleted), delete orphan and allow re-link.
+    oid = getattr(other_user_id, "id", other_user_id)  # DBRef has .id
+    other_user = await User.get(PydanticObjectId(oid) if not isinstance(oid, PydanticObjectId) else oid)
+    if not other_user:
+        log.info("gmail_orphan_removed", email=email[:50], orphan_user_id=str(other_user_id))
+        await other.delete()
+        return
+    log.warning("email_already_linked", email=email[:50], other_user_id=str(other_user_id))
+    raise BadRequestError("This email is already linked to another account.")
+
+
 async def _store_credentials(
     user_id: PydanticObjectId,
     credentials,
@@ -96,6 +140,8 @@ async def _store_credentials(
         log.debug("_store_credentials_updated", account_id=str(existing.id))
         return existing
     email = await _fetch_profile_email(credentials)
+    await _ensure_email_not_linked_to_other_user(email, user_id)
+    daily_limit = _daily_send_limit_for_email(email)
     acc = GmailAccount(
         user=user,
         email=email,
@@ -103,6 +149,7 @@ async def _store_credentials(
         refresh_token_encrypted=encrypt_token(credentials.refresh_token or ""),
         token_expiry=expiry,
         scopes=scopes_list,
+        daily_send_limit=daily_limit,
     )
     await acc.insert()
     log.debug("_store_credentials_created", account_id=str(acc.id), email=email)
@@ -162,13 +209,20 @@ async def get_valid_access_token(account: GmailAccount) -> str:
 
 
 async def verify_gmail_account(account: GmailAccount) -> dict:
-    """Call Gmail profile to verify token; return profile snippet."""
+    """Call Gmail profile to verify token; return profile snippet with daily_send_limit and is_new_account."""
     log.info("verify_gmail_account", account_id=str(account.id))
     token = await get_valid_access_token(account)
     creds = Credentials(token=token)
     service = build("gmail", "v1", credentials=creds)
     profile = service.users().getProfile(userId="me").execute()
-    return {"email": profile.get("emailAddress"), "messagesTotal": profile.get("messagesTotal")}
+    messages_total = profile.get("messagesTotal") or 0
+    is_new_account = messages_total < GMAIL_NEW_ACCOUNT_MESSAGES_THRESHOLD
+    return {
+        "email": profile.get("emailAddress"),
+        "messagesTotal": messages_total,
+        "daily_send_limit": getattr(account, "daily_send_limit", GMAIL_PERSONAL_DAILY_LIMIT),
+        "is_new_account": is_new_account,
+    }
 
 
 async def disconnect_gmail(user_id: PydanticObjectId) -> None:
@@ -216,6 +270,7 @@ async def add_account_app_password(
     if not verify_smtp_app_password(email, app_password):
         log.warning("add_account_app_password_smtp_failed", user_id=str(user_id), email=email)
         raise BadRequestError("Could not sign in with this email and app password. Check 2FA is on and you're using an app password.")
+    await _ensure_email_not_linked_to_other_user(email, user_id)
     existing = await GmailAccount.find_one(
         GmailAccount.user.id == user_id,
         GmailAccount.email == email,
@@ -224,14 +279,17 @@ async def add_account_app_password(
     if existing:
         existing.app_password_encrypted = encrypt_token(app_password)
         existing.auth_type = "app_password"
+        existing.daily_send_limit = _daily_send_limit_for_email(email)
         existing.updated_at = datetime.utcnow()
         await existing.save()
         return existing
+    daily_limit = _daily_send_limit_for_email(email)
     acc = GmailAccount(
         user=user,
         email=email,
         auth_type="app_password",
         app_password_encrypted=encrypt_token(app_password),
+        daily_send_limit=daily_limit,
     )
     await acc.insert()
     from app.core.audit import log_event
@@ -248,7 +306,15 @@ async def list_accounts_for_user(user_id: PydanticObjectId) -> list[dict]:
         GmailAccount.revoked == False,  # noqa: E712
     ).to_list()
     log.debug("list_accounts_for_user_ok", user_id=str(user_id), count=len(accounts))
-    return [{"id": str(a.id), "email": a.email, "auth_type": a.auth_type} for a in accounts]
+    return [
+        {
+            "id": str(a.id),
+            "email": a.email,
+            "auth_type": a.auth_type,
+            "daily_send_limit": getattr(a, "daily_send_limit", GMAIL_PERSONAL_DAILY_LIMIT),
+        }
+        for a in accounts
+    ]
 
 
 async def revoke_account_by_id(user_id: PydanticObjectId, account_id: PydanticObjectId) -> None:
@@ -274,6 +340,61 @@ def get_app_password_plain(account: GmailAccount) -> str:
     return decrypt_token(account.app_password_encrypted or "")
 
 
+def _make_raw_message(to: str, subject: str, body_html: str, from_email: str) -> str:
+    """Build RFC 2822 message and return base64url-encoded raw for Gmail API."""
+    msg = MIMEText(body_html, "html")
+    msg["From"] = from_email
+    msg["To"] = to
+    msg["Subject"] = subject
+    return base64.urlsafe_b64encode(msg.as_bytes()).decode()
+
+
+async def create_draft_in_gmail(account: GmailAccount, to: str, subject: str, body_html: str) -> str:
+    """
+    Create a draft in Gmail (OAuth only). Gmail will send it when we call drafts.send at send_at.
+    Returns Gmail draft id. Raises on failure.
+    """
+    log.debug("create_draft_in_gmail", account_id=str(account.id), to=to[:50])
+    token = await get_valid_access_token(account)
+    creds = Credentials(token=token)
+    service = build("gmail", "v1", credentials=creds)
+    raw = _make_raw_message(to, subject, body_html, account.email)
+    draft = service.users().drafts().create(userId="me", body={"message": {"raw": raw}}).execute()
+    draft_id = draft.get("id", "")
+    log.debug("create_draft_in_gmail_ok", account_id=str(account.id), draft_id=draft_id)
+    return draft_id
+
+
+async def send_email_via_gmail_api(account: GmailAccount, to: str, subject: str, body_html: str) -> str:
+    """
+    Send one email via Gmail API (OAuth). Returns Gmail message id.
+    Raises on failure.
+    """
+    log.debug("send_email_via_gmail_api", account_id=str(account.id), to=to[:50])
+    token = await get_valid_access_token(account)
+    creds = Credentials(token=token)
+    service = build("gmail", "v1", credentials=creds)
+    raw = _make_raw_message(to, subject, body_html, account.email)
+    result = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    msg_id = result.get("id", "")
+    log.debug("send_email_via_gmail_api_ok", account_id=str(account.id), message_id=msg_id)
+    return msg_id
+
+
+async def send_draft_via_gmail_api(account: GmailAccount, draft_id: str) -> str:
+    """
+    Send an existing Gmail draft (OAuth). Gmail server sends at call time. Returns message id.
+    """
+    log.debug("send_draft_via_gmail_api", account_id=str(account.id), draft_id=draft_id)
+    token = await get_valid_access_token(account)
+    creds = Credentials(token=token)
+    service = build("gmail", "v1", credentials=creds)
+    result = service.users().drafts().send(userId="me", body={"id": draft_id}).execute()
+    msg_id = result.get("id", "")
+    log.debug("send_draft_via_gmail_api_ok", account_id=str(account.id), message_id=msg_id)
+    return msg_id
+
+
 def send_email_smtp(sender_email: str, app_password: str, to: str, subject: str, body_html: str) -> None:
     """Send one email via Gmail SMTP with app password."""
     log.debug("send_email_smtp", sender=sender_email[:50], to=to[:50], subject=subject[:50])
@@ -285,3 +406,42 @@ def send_email_smtp(sender_email: str, app_password: str, to: str, subject: str,
         server.starttls()
         server.login(sender_email, app_password)
         server.sendmail(sender_email, [to], msg.as_string())
+
+
+async def send_verification_test_email(account: GmailAccount) -> None:
+    """
+    Send a verification test email from the account (to itself) to confirm send permission.
+    Raises BadRequestError if send fails.
+    """
+    log.info("send_verification_test_email", account_id=str(account.id), email=account.email[:50])
+    to = account.email
+    subject = "FindMyJob – Email connected"
+    body_html = (
+        "<p>Your email has been successfully connected to FindMyJob.</p>"
+        "<p>You can now use this account to send outreach campaigns.</p>"
+    )
+    if account.auth_type == "app_password":
+        try:
+            app_password = get_app_password_plain(account)
+            send_email_smtp(account.email, app_password, to, subject, body_html)
+        except Exception as e:
+            log.warning("send_verification_test_email_failed", account_id=str(account.id), reason=str(e)[:200])
+            raise BadRequestError("Could not send test email. Check that this account has send permission.") from e
+        log.info("send_verification_test_email_ok", account_id=str(account.id))
+        return
+    # OAuth: use Gmail API to send
+    try:
+        token = await get_valid_access_token(account)
+        creds = Credentials(token=token)
+        service = build("gmail", "v1", credentials=creds)
+        msg = MIMEText(body_html, "html")
+        msg["Subject"] = subject
+        msg["From"] = account.email
+        msg["To"] = to
+        import base64
+        raw = base64.urlsafe_b64encode(msg.as_string().encode()).decode()
+        service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        log.info("send_verification_test_email_ok", account_id=str(account.id))
+    except Exception as e:
+        log.warning("send_verification_test_email_failed", account_id=str(account.id), reason=str(e)[:200])
+        raise BadRequestError("Could not send test email. Check that this account has send permission.") from e

@@ -30,6 +30,16 @@ async def campaigns_list(user: User = Depends(get_current_user)):
     }
 
 
+@router.get("/{campaign_id}")
+async def campaign_detail(campaign_id: str, user: User = Depends(get_current_user)):
+    """Return full campaign details (template, list name, counts, etc.)."""
+    log.info("campaign_detail", user_id=str(user.id), campaign_id=campaign_id)
+    from beanie import PydanticObjectId
+    out = await campaigns_service.get_campaign_detail(PydanticObjectId(campaign_id), user.id)
+    log.info("campaign_detail_ok", user_id=str(user.id), campaign_id=campaign_id)
+    return out
+
+
 @router.post("")
 async def campaign_create(body: CampaignCreate, user: User = Depends(get_current_user)):
     log.info("campaign_create", user_id=str(user.id), name=body.name, template_id=body.template_id)
@@ -72,7 +82,7 @@ async def campaign_schedule(
   user: User = Depends(get_current_user),
   idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
-    """Create Gmail drafts and schedule sends; charge credits. Optional Idempotency-Key."""
+    """Start background scheduling: create emails in Gmail at random times; returns 202 for polling."""
     log.info("campaign_schedule", user_id=str(user.id), campaign_id=campaign_id)
     from beanie import PydanticObjectId
     out = await campaigns_service.schedule_campaign(
@@ -80,5 +90,13 @@ async def campaign_schedule(
         user.id,
         idempotency_key=idempotency_key,
     )
-    log.info("campaign_schedule_ok", user_id=str(user.id), campaign_id=campaign_id, scheduled=out.get("scheduled"))
-    return out
+    log.info(
+        "campaign_schedule_ok",
+        user_id=str(user.id),
+        campaign_id=campaign_id,
+        scheduling_status=out.get("scheduling_status"),
+        scheduled_count=out.get("scheduled_count"),
+        scheduling_total=out.get("scheduling_total"),
+    )
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=202, content=out)

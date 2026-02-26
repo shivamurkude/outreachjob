@@ -6,6 +6,10 @@ from pydantic import Field
 
 from app.models.user import User
 
+# Gmail daily limits: personal ~500/day, Workspace ~2000/day
+GMAIL_PERSONAL_DAILY_LIMIT = 500
+GMAIL_WORKSPACE_DAILY_LIMIT = 2000
+
 
 class GmailAccount(Document):
     user: Link[User]
@@ -22,6 +26,9 @@ class GmailAccount(Document):
     revoked_at: datetime | None = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    # Sending quota (personal @gmail.com = 500, Workspace = 2000)
+    daily_send_limit: int = GMAIL_PERSONAL_DAILY_LIMIT
+    account_created_at: datetime | None = None  # if obtainable from provider
 
     class Settings:
         name = "gmail_accounts"

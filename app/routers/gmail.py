@@ -26,6 +26,7 @@ class AccountItem(BaseModel):
     id: str
     email: str
     auth_type: str
+    daily_send_limit: int = 500
 
 
 class AccountListResponse(BaseModel):
@@ -34,15 +35,18 @@ class AccountListResponse(BaseModel):
 
 @router.get("/connect", response_model=ConnectResponse)
 async def gmail_connect(
-    redirect_uri: str | None = Query(None),
+    redirect_uri: str | None = Query(None, description="Frontend URL to redirect after OAuth (stored in state)"),
     user: User = Depends(get_current_user),
 ):
     """Return Google OAuth URL for the client to redirect the user to."""
     log.info("gmail_connect", user_id=str(user.id))
     from app.core.security import get_session_serializer
     serializer = get_session_serializer()
-    state = serializer.dumps({"user_id": str(user.id)}, salt="gmail-oauth-state")
-    url = gmail_service.get_authorization_url(redirect_uri=redirect_uri, state=state)
+    state = serializer.dumps(
+        {"user_id": str(user.id), "redirect_uri": redirect_uri} if redirect_uri else {"user_id": str(user.id)},
+        salt="gmail-oauth-state",
+    )
+    url = gmail_service.get_authorization_url(redirect_uri=None, state=state)
     return ConnectResponse(authorization_url=url)
 
 
@@ -106,14 +110,15 @@ async def gmail_oauth_callback(
         raise BadRequestError("Invalid state")
     await gmail_service.exchange_code_and_save(user_id, code)
     log.info("gmail_oauth_callback_ok", user_id=user_id)
-    if redirect:
-        return Response(status_code=302, headers={"Location": redirect})
+    frontend_redirect = redirect or payload.get("redirect_uri")
+    if frontend_redirect:
+        return Response(status_code=302, headers={"Location": frontend_redirect})
     return {"status": "connected"}
 
 
 @router.post("/verify")
 async def gmail_verify(user: User = Depends(get_current_user)):
-    """Verify stored Gmail token by calling Gmail profile."""
+    """Verify stored Gmail token by calling Gmail profile. Returns daily_send_limit, is_new_account."""
     log.info("gmail_verify", user_id=str(user.id))
     from app.models.gmail_account import GmailAccount
     account = await GmailAccount.find_one(GmailAccount.user.id == user.id, GmailAccount.revoked == False)  # noqa: E712
@@ -123,6 +128,25 @@ async def gmail_verify(user: User = Depends(get_current_user)):
     profile = await gmail_service.verify_gmail_account(account)
     log.info("gmail_verify_ok", user_id=str(user.id), email=profile.get("email"))
     return profile
+
+
+@router.post("/send-test-email")
+async def gmail_send_test_email(
+    account_id: str | None = None,
+    user: User = Depends(get_current_user),
+):
+    """Send a verification test email from the connected account (to itself). Optional account_id for multiple accounts."""
+    from app.models.gmail_account import GmailAccount
+    if account_id:
+        account = await GmailAccount.get(PydanticObjectId(account_id))
+        if not account or str(account.user.ref) != str(user.id) or account.revoked:
+            raise BadRequestError("Gmail account not found")
+    else:
+        account = await GmailAccount.find_one(GmailAccount.user.id == user.id, GmailAccount.revoked == False)  # noqa: E712
+        if not account:
+            raise BadRequestError("No Gmail account connected")
+    await gmail_service.send_verification_test_email(account)
+    return {"status": "sent", "email": account.email}
 
 
 @router.delete("/disconnect")

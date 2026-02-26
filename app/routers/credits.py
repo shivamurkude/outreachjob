@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.deps import get_current_user
@@ -8,6 +9,28 @@ from app.services import credits as credits_service
 
 router = APIRouter()
 log = get_logger(__name__)
+
+
+class AddCreditsBody(BaseModel):
+    """Temporary: add credits without payment (for testing)."""
+    credits: int = Field(..., ge=1, le=10000)
+
+
+@router.post("/add")
+async def credits_add(body: AddCreditsBody, user: User = Depends(get_current_user)):
+    """Temporary: add credits to current user without payment (for testing)."""
+    log.info("credits_add", user_id=str(user.id), credits=body.credits)
+    await credits_service.apply_ledger_entry(
+        user.id,
+        body.credits,
+        "purchase",
+        reference_type="test",
+        reference_id="manual",
+    )
+    # Re-read from DB so response matches persisted state
+    balance = await credits_service.get_balance(user.id)
+    log.info("credits_add_ok", user_id=str(user.id), balance=balance)
+    return {"balance": balance, "credits_added": body.credits}
 
 
 @router.get("/balance")
@@ -28,7 +51,7 @@ async def credits_ledger(
     """Return ledger entries for current user (newest first)."""
     log.info("credits_ledger", user_id=str(user.id), limit=limit, offset=offset)
     entries = (
-        await CreditLedgerEntry.find(CreditLedgerEntry.user.id == user.id)
+        await CreditLedgerEntry.find(CreditLedgerEntry.user.ref == user.id)
         .sort(-CreditLedgerEntry.created_at)
         .skip(offset)
         .limit(limit)

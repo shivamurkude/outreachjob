@@ -89,6 +89,36 @@ async def enqueue_process_recipient_list(list_id: str) -> None:
     await redis.close()
 
 
+async def schedule_campaign_background(
+    ctx: dict[str, Any], campaign_id: str, user_id: str, idempotency_key: str
+) -> None:
+    """Background job: create Gmail drafts (or queued records) for each recipient at random send_at."""
+    job_id = ctx.get("job_id") if isinstance(ctx.get("job_id"), str) else None
+    log.info("schedule_campaign_background_start", campaign_id=campaign_id, job_id=job_id)
+
+    async def _run() -> None:
+        from app.services import campaigns as campaigns_service
+        await campaigns_service.run_schedule_campaign_background(campaign_id, user_id, idempotency_key)
+
+    await _run_with_dlq(
+        "schedule_campaign_background",
+        job_id,
+        [campaign_id, user_id, idempotency_key],
+        {},
+        _run(),
+    )
+
+
+async def enqueue_schedule_campaign(campaign_id: str, user_id: str, idempotency_key: str) -> None:
+    """Enqueue schedule_campaign_background job (call from API)."""
+    settings = get_redis_settings()
+    redis = await create_pool(settings)
+    job = await redis.enqueue_job("schedule_campaign_background", campaign_id, user_id, idempotency_key)
+    await redis.close()
+    job_id = getattr(job, "job_id", getattr(job, "id", None)) if job else None
+    log.info("schedule_campaign_enqueued", campaign_id=campaign_id, job_id=str(job_id) if job_id else None)
+
+
 # Cron: send_due_emails (Phase 10)
 async def send_due_emails(ctx: dict[str, Any]) -> None:
     """Cron job: send scheduled emails that are due (Gmail API)."""

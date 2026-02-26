@@ -5,10 +5,17 @@ from app.core.logging import get_logger
 from app.deps import get_current_user
 from app.models.user import User
 from app.services import recipients as recipients_service
-from app.worker.tasks import enqueue_process_recipient_list
 
 router = APIRouter()
 log = get_logger(__name__)
+
+
+@router.get("/system/count")
+async def system_recipients_count(user: User = Depends(get_current_user)):
+    """Return count of platform (system) recipients available for campaigns."""
+    from app.models.system_recipient import SystemRecipient
+    count = await SystemRecipient.count()
+    return {"count": count}
 
 
 @router.get("/lists")
@@ -27,7 +34,10 @@ async def lists_list(user: User = Depends(get_current_user)):
                 "total_count": r.total_count,
                 "valid_count": r.valid_count,
                 "invalid_count": r.invalid_count,
+                "duplicate_count": getattr(r, "duplicate_count", 0),
+                "suppressed_count": getattr(r, "suppressed_count", 0),
                 "created_at": r.created_at.isoformat(),
+                "updated_at": r.updated_at.isoformat(),
             }
             for r in items
         ],
@@ -40,22 +50,28 @@ async def lists_upload(
     name: str | None = None,
     file: UploadFile = File(...),
 ):
-    """Upload recipients list (CSV/XLSX); creates list and enqueues processing job."""
+    """Upload recipients list (CSV/XLSX); create list and process synchronously so status is ready before response."""
     log.info("lists_upload", user_id=str(user.id), filename=file.filename)
     if not file.filename:
         raise BadRequestError("Missing filename")
     content = await file.read()
     rlist = await recipients_service.upload_list(user, name or file.filename, content, file.filename)
     log.info("lists_upload_ok", user_id=str(user.id), list_id=str(rlist.id))
-    try:
-        await enqueue_process_recipient_list(str(rlist.id))
-    except Exception:  # noqa: BLE001; pylint: disable=broad-exception-caught
-        pass  # list stays processing; worker can be run later
+    await recipients_service.process_recipient_list_upload(str(rlist.id))
+    rlist = await recipients_service.get_list(user.id, rlist.id)
+    if not rlist:
+        raise BadRequestError("List not found after processing")
     return {
         "id": str(rlist.id),
         "name": rlist.name,
         "status": rlist.status,
+        "total_count": rlist.total_count,
+        "valid_count": rlist.valid_count,
+        "invalid_count": rlist.invalid_count,
+        "duplicate_count": getattr(rlist, "duplicate_count", 0),
+        "suppressed_count": getattr(rlist, "suppressed_count", 0),
         "created_at": rlist.created_at.isoformat(),
+        "updated_at": rlist.updated_at.isoformat(),
     }
 
 
@@ -74,6 +90,8 @@ async def list_get(list_id: str, user: User = Depends(get_current_user)):
         "total_count": rlist.total_count,
         "valid_count": rlist.valid_count,
         "invalid_count": rlist.invalid_count,
+        "duplicate_count": getattr(rlist, "duplicate_count", 0),
+        "suppressed_count": getattr(rlist, "suppressed_count", 0),
         "created_at": rlist.created_at.isoformat(),
     }
 

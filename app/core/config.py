@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     # Redis
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    # When True, run schedule_campaign_background in the API process (no Redis/Worker). Useful for dev.
+    run_schedule_in_process: bool = Field(default=False, alias="RUN_SCHEDULE_IN_PROCESS")
 
     # Google OAuth
     google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")

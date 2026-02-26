@@ -13,6 +13,7 @@ class OutreachState(TypedDict):
     schedule_plan: list[dict[str, Any]]
     credits_required: int
     credits_per_send: int
+    estimated_response_probability: float
     error: str
 
 
@@ -32,7 +33,13 @@ async def _plan_outreach(state: OutreachState) -> dict:
         if not campaign or str(campaign.user.ref) != user_id:
             return {"error": "Campaign not found"}
         if not campaign.recipient_list_id:
-            return {"recipient_ids": [], "schedule_plan": [], "credits_required": 0, "credits_per_send": get_settings().credits_per_send}
+            return {
+                "recipient_ids": [],
+                "schedule_plan": [],
+                "credits_required": 0,
+                "credits_per_send": get_settings().credits_per_send,
+                "estimated_response_probability": 0.0,
+            }
         rlist = await RecipientList.get(PydanticObjectId(campaign.recipient_list_id))
         if not rlist:
             return {"error": "List not found"}
@@ -50,11 +57,19 @@ async def _plan_outreach(state: OutreachState) -> dict:
                 "send_at": send_at.isoformat(),
             })
             send_at = send_at + timedelta(seconds=30)
+        # Placeholder: estimated recruiter response probability (e.g. from list size / verification rate)
+        n = len(items)
+        estimated_response_probability = 0.12 if n > 0 else 0.0
+        if n <= 20:
+            estimated_response_probability = 0.18
+        elif n <= 100:
+            estimated_response_probability = 0.15
         return {
             "recipient_ids": [str(i.id) for i in items],
             "schedule_plan": schedule_plan,
             "credits_required": credits_required,
             "credits_per_send": credits_per_send,
+            "estimated_response_probability": estimated_response_probability,
             "error": "",
         }
     except Exception as e:
@@ -79,6 +94,7 @@ async def run_outreach(campaign_id: str, user_id: str) -> dict:
         "schedule_plan": [],
         "credits_required": 0,
         "credits_per_send": 0,
+        "estimated_response_probability": 0.0,
         "error": "",
     }
     result = await graph.ainvoke(initial)

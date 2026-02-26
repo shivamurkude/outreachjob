@@ -65,7 +65,7 @@ async def grant_referral_reward_if_eligible(referee_id: PydanticObjectId) -> Non
     from app.models.credit_ledger import CreditLedgerEntry
     idempotency_key = f"referral_reward_{referee_id}"
     existing = await CreditLedgerEntry.find_one(
-        CreditLedgerEntry.user.id == referrer.id,
+        CreditLedgerEntry.user.ref == referrer.id,
         CreditLedgerEntry.idempotency_key == idempotency_key,
     )
     if existing:
@@ -88,7 +88,7 @@ async def referral_stats(user_id: PydanticObjectId) -> dict:
     referred_count = await User.find(User.referred_by.ref == user.id).count()
     from app.models.credit_ledger import CreditLedgerEntry
     reward_entries = await CreditLedgerEntry.find(
-        CreditLedgerEntry.user.id == user.id,
+        CreditLedgerEntry.user.ref == user.id,
         CreditLedgerEntry.reason == "referral",
     ).to_list()
     total_reward = sum(e.amount for e in reward_entries)

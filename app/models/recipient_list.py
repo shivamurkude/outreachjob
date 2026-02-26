@@ -15,6 +15,8 @@ class RecipientList(Document):
     total_count: int = 0
     valid_count: int = 0
     invalid_count: int = 0
+    duplicate_count: int = 0
+    suppressed_count: int = 0
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

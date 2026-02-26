@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.models.recipient_item import RecipientItem
 from app.models.recipient_list import RecipientList
 from app.models.user import User
+from app.services.suppression import list_suppressed_emails
 from app.storage.base import get_storage
 
 log = get_logger(__name__)
@@ -109,14 +110,34 @@ async def process_recipient_list_upload(list_id: str) -> None:
         rows = parse_xlsx(content)
     else:
         rows = parse_csv(content)
+
+    user_id = str(rlist.user.ref) if rlist.user else None
+    suppressed = await list_suppressed_emails(user_id)
+
     valid = 0
     invalid = 0
+    duplicate = 0
+    suppressed_skip = 0
+    seen_emails: set[str] = set()
+
     for row in rows:
         email = find_email_column(row)
         if not email or not EMAIL_RE.match(email):
             invalid += 1
             continue
+        email = normalize_email(email)
         domain = extract_domain(email)
+        if domain:
+            domain = domain.lower().strip()
+
+        if email in seen_emails:
+            duplicate += 1
+            continue
+        if email in suppressed:
+            suppressed_skip += 1
+            continue
+        seen_emails.add(email)
+
         name = None
         company = None
         for k, v in row.items():
@@ -133,20 +154,31 @@ async def process_recipient_list_upload(list_id: str) -> None:
         item = RecipientItem(
             list=rlist,
             email=email,
-            domain=domain,
+            domain=domain or "",
             name=name,
             company=company,
             raw_row=dict(row),
         )
         await item.insert()
         valid += 1
+
     rlist.total_count = len(rows)
     rlist.valid_count = valid
     rlist.invalid_count = invalid
+    rlist.duplicate_count = duplicate
+    rlist.suppressed_count = suppressed_skip
     rlist.status = "ready"
     rlist.updated_at = datetime.utcnow()
     await rlist.save()
-    log.info("process_recipient_list_upload_ok", list_id=list_id, total=len(rows), valid=valid, invalid=invalid)
+    log.info(
+        "process_recipient_list_upload_ok",
+        list_id=list_id,
+        total=len(rows),
+        valid=valid,
+        invalid=invalid,
+        duplicate=duplicate,
+        suppressed=suppressed_skip,
+    )
 
 
 async def get_list(user_id: PydanticObjectId, list_id: PydanticObjectId) -> RecipientList | None:

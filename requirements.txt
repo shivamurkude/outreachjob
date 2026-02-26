@@ -22,6 +22,7 @@ pymongo>=4.6.0
 # Queue / Scheduler
 redis>=5.0.0
 arq>=0.25.0
+nest-asyncio>=1.6.0
 tenacity>=8.2.0
 
 # Gmail API

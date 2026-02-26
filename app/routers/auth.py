@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from app.core.config import get_settings
@@ -60,7 +60,31 @@ async def auth_me(user: User = Depends(get_current_user)):
         "picture": user.picture,
         "avatar_url": user.picture,
         "google_sub": user.google_sub,
+        "attested_outreach_allowed": getattr(user, "attested_outreach_allowed", False),
+        "timezone": getattr(user, "timezone", "UTC"),
+        "locale": getattr(user, "locale", "en"),
     }
+
+
+class DeleteAccountRequest(BaseModel):
+    confirm: bool = False
+
+
+@router.post("/delete-account")
+async def auth_delete_account(body: DeleteAccountRequest, response: Response, user: User = Depends(get_current_user)):
+    """
+    Permanently delete the current user and all their data (campaigns, templates,
+    lists, credits, Gmail accounts, resume, audit logs, etc.). Requires confirm=true.
+    """
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to delete your account.")
+    log.info("auth_delete_account", user_id=str(user.id), email=user.email[:50] if user.email else None)
+    await user_service.delete_user_and_all_data(user.id)
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+    )
+    return {"status": "ok", "message": "Account and all data deleted."}
 
 
 @router.post("/logout")

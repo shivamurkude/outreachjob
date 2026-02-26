@@ -15,12 +15,14 @@ class OnboardingState(TypedDict):
     has_gmail: bool
     has_list: bool
     has_template: bool
+    has_launched_campaign: bool
     next_step: str
     completed: bool
 
 
 async def _check_onboarding(state: OnboardingState) -> dict:
     log.debug("_check_onboarding", user_id=state.get("user_id"))
+    from app.models.campaign import Campaign
     from app.models.gmail_account import GmailAccount
     from app.models.recipient_list import RecipientList
     from app.models.template import Template
@@ -30,6 +32,10 @@ async def _check_onboarding(state: OnboardingState) -> dict:
     has_gmail = await GmailAccount.find_one(GmailAccount.user.id == uid, GmailAccount.revoked == False) is not None  # noqa: E712
     has_list = await RecipientList.find_one(RecipientList.user.id == uid) is not None
     has_template = await Template.find_one(Template.user.id == uid) is not None
+    has_launched_campaign = await Campaign.find_one(
+        Campaign.user.id == uid,
+        Campaign.scheduled_count > 0,  # noqa: E712
+    ) is not None
 
     if not has_gmail:
         next_step = "connect_gmail"
@@ -37,14 +43,17 @@ async def _check_onboarding(state: OnboardingState) -> dict:
         next_step = "upload_list"
     elif not has_template:
         next_step = "create_template"
-    else:
+    elif not has_launched_campaign:
         next_step = "create_campaign"
-    completed = has_gmail and has_list and has_template
+    else:
+        next_step = "success"
+    completed = has_gmail and has_list and has_template and has_launched_campaign
     log.debug("_check_onboarding_ok", user_id=user_id, next_step=next_step, completed=completed)
     return {
         "has_gmail": has_gmail,
         "has_list": has_list,
         "has_template": has_template,
+        "has_launched_campaign": has_launched_campaign,
         "next_step": next_step,
         "completed": completed,
     }
@@ -68,6 +77,7 @@ async def run_onboarding(user_id: str) -> dict:
         "has_gmail": False,
         "has_list": False,
         "has_template": False,
+        "has_launched_campaign": False,
         "next_step": "",
         "completed": False,
     }
